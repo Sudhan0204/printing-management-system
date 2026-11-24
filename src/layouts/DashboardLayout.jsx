@@ -4,9 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../services/api";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", to: "/", end: true },
-  { label: "Businesses", disabled: true },
-  { label: "Users", disabled: true },
+  { label: "Dashboard", to: "/admin/dashboard", end: true },
+  { label: "Clients", to: "/admin/clients" },
 ];
 
 export default function DashboardLayout() {
@@ -14,6 +13,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleLogout() {
     setLogoutError("");
@@ -21,7 +21,7 @@ export default function DashboardLayout() {
 
     try {
       await logout();
-      navigate("/login", { replace: true });
+      navigate("/admin/login", { replace: true });
     } catch (error) {
       setLogoutError(getErrorMessage(error, "Could not log out. Please try again."));
       setLoggingOut(false);
@@ -29,7 +29,7 @@ export default function DashboardLayout() {
   }
 
   return (
-    <div className="shell">
+    <div className={`shell ${menuOpen ? "menu-open" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">PM</span>
@@ -39,25 +39,19 @@ export default function DashboardLayout() {
           </div>
         </div>
 
-        <nav aria-label="Primary">
-          {NAV_ITEMS.map((item) =>
-            item.disabled ? (
-              <span key={item.label} className="nav-link is-disabled" title="Coming soon">
-                {item.label}
-              </span>
-            ) : (
-              <NavLink
-                key={item.label}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  isActive ? "nav-link is-active" : "nav-link"
-                }
-              >
-                {item.label}
-              </NavLink>
-            )
-          )}
+        <nav aria-label="Primary" onClick={() => setMenuOpen(false)}>
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.label}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                isActive ? "nav-link is-active" : "nav-link"
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
         <section className="profile">
@@ -68,11 +62,30 @@ export default function DashboardLayout() {
         </section>
       </aside>
 
+      {menuOpen ? (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
+
       <div className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Platform</p>
-            <h1>Super Admin</h1>
+          <div className="topbar-start">
+            <button
+              type="button"
+              className="ghost-button menu-toggle"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+            >
+              Menu
+            </button>
+            <div>
+              <p className="eyebrow">Platform</p>
+              <h1>Super Admin</h1>
+            </div>
           </div>
           <button
             type="button"
