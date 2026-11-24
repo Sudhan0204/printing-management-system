@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
+  adminLoginRequest,
   fetchCsrfToken,
   fetchCurrentUser,
-  loginRequest,
   logoutRequest,
+  tenantLoginRequest,
 } from "../services/auth";
 
 const AuthContext = createContext(null);
@@ -58,8 +59,15 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  async function login(email, password) {
-    const response = await loginRequest(email, password, csrfToken);
+  async function loginAsAdmin(email, password) {
+    const response = await adminLoginRequest(email, password, csrfToken);
+    setUser(response.data.user);
+    setCsrfToken(response.data.csrf_token || "");
+    return response.data.user;
+  }
+
+  async function loginAsTenant(email, password) {
+    const response = await tenantLoginRequest(email, password, csrfToken);
     setUser(response.data.user);
     setCsrfToken(response.data.csrf_token || "");
     return response.data.user;
@@ -83,7 +91,15 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, csrfToken, loading, login, logout, clearSession }}
+      value={{
+        user,
+        csrfToken,
+        loading,
+        loginAsAdmin,
+        loginAsTenant,
+        logout,
+        clearSession,
+      }}
     >
       {children}
     </AuthContext.Provider>
