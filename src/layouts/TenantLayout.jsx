@@ -9,9 +9,8 @@ const NAV_ITEMS = [
   { label: "Products & Rates", to: "/products" },
   { label: "Billing", to: "/billing" },
   { label: "Payments", to: "/payments" },
-  { label: "Expenses", to: "/expenses", disabled: true },
-  { label: "Reports", to: "/reports", disabled: true },
-  { label: "Settings", to: "/settings", disabled: true },
+  { label: "Reports", to: "/reports" },
+  { label: "Business Settings", to: "/settings", disabled: true },
 ];
 
 export default function TenantLayout() {
