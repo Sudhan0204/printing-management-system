@@ -10,7 +10,6 @@ const NAV_ITEMS = [
   { label: "Billing", to: "/billing" },
   { label: "Payments", to: "/payments" },
   { label: "Reports", to: "/reports" },
-  { label: "Business Settings", to: "/settings", disabled: true },
 ];
 
 export default function TenantLayout() {

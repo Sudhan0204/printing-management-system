@@ -22,6 +22,7 @@ export default function CustomerReports() {
 
   const [searchName, setSearchName] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
+  const [searchEmail, setSearchEmail] = useState("");
   const [status, setStatus] = useState("");
   const [datePreset, setDatePreset] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -42,6 +43,7 @@ export default function CustomerReports() {
     () => ({
       search_name: searchName.trim() || undefined,
       search_phone: searchPhone.trim() || undefined,
+      search_email: searchEmail.trim().toLowerCase() || undefined,
       status: status || undefined,
       date_preset: datePreset || undefined,
       date_from: datePreset === "custom" ? dateFrom || undefined : undefined,
@@ -49,7 +51,7 @@ export default function CustomerReports() {
       page,
       per_page: 25,
     }),
-    [searchName, searchPhone, status, datePreset, dateFrom, dateTo, page]
+    [searchName, searchPhone, searchEmail, status, datePreset, dateFrom, dateTo, page]
   );
 
   useEffect(() => {
@@ -84,12 +86,25 @@ export default function CustomerReports() {
       }
     }
 
-    const timer = setTimeout(load, searchName || searchPhone ? 250 : 0);
+    const timer = setTimeout(
+      load,
+      searchName || searchPhone || searchEmail ? 250 : 0
+    );
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [filterParams, clearSession, navigate, datePreset, dateFrom, dateTo, searchName, searchPhone]);
+  }, [
+    filterParams,
+    clearSession,
+    navigate,
+    datePreset,
+    dateFrom,
+    dateTo,
+    searchName,
+    searchPhone,
+    searchEmail,
+  ]);
 
   const pageIds = customers.map((item) => item.id);
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -120,10 +135,22 @@ export default function CustomerReports() {
     setSelectedIds(new Set());
   }
 
+  function resetFilters() {
+    setSearchName("");
+    setSearchPhone("");
+    setSearchEmail("");
+    setStatus("");
+    setDatePreset("");
+    setDateFrom("");
+    setDateTo("");
+    setPage(1);
+  }
+
   function exportFilters() {
     return {
       search_name: searchName.trim(),
       search_phone: searchPhone.trim(),
+      search_email: searchEmail.trim().toLowerCase(),
       status,
       date_preset: datePreset,
       date_from: datePreset === "custom" ? dateFrom : "",
@@ -131,19 +158,21 @@ export default function CustomerReports() {
     };
   }
 
-  async function handleExport(mode) {
+  async function handleExport(mode, overrideIds = null) {
+    if (exporting) return;
     setError("");
     setFlash("");
     setExporting(mode);
 
     try {
+      const selected = overrideIds || Array.from(selectedIds);
       const payload = {
         mode,
-        customer_ids: mode === "selected" ? Array.from(selectedIds) : [],
+        customer_ids: mode === "selected" ? selected : [],
         filters: exportFilters(),
       };
       const result = await exportCustomerReport(payload, csrfToken);
-      setFlash(`Downloaded ${result.filename}`);
+      setFlash(`Excel downloaded: ${result.filename}`);
     } catch (requestError) {
       if (requestError?.response?.data instanceof Blob) {
         try {
@@ -162,26 +191,29 @@ export default function CustomerReports() {
   }
 
   const cards = [
-    { label: "Total customers", value: summary?.total_customers, raw: true },
-    { label: "Total billed", value: summary?.total_billed },
-    { label: "Total received", value: summary?.total_received },
-    { label: "Outstanding", value: summary?.total_outstanding },
+    { label: "Total Customers", value: summary?.total_customers, raw: true, tone: "neutral" },
+    { label: "Total Bills", value: summary?.total_bills, raw: true, tone: "neutral" },
+    { label: "Total Billed", value: summary?.total_billed, tone: "billed" },
+    { label: "Payments Received", value: summary?.total_received, tone: "paid" },
+    { label: "Outstanding Balance", value: summary?.total_outstanding, tone: "due" },
   ];
 
   return (
-    <main className="dashboard reports-page">
-      <section className="panel panel-header-row">
+    <main className="dashboard reports-workspace">
+      <section className="panel report-hero">
         <div>
-          <p className="eyebrow">Customer reports</p>
-          <h2>Customer report & Excel export</h2>
-          <p className="muted">
-            Bills filter by bill date. Payments filter by payment date. Outstanding uses bill balances in
-            the bill-date range.
+          <p className="eyebrow">Reports</p>
+          <h2>Customer Reports</h2>
+          <p className="muted report-hero-copy">
+            Generate, filter and export detailed customer billing and payment records.
           </p>
         </div>
-        <Link to="/reports" className="ghost-button link-button">
-          All reports
-        </Link>
+        <div className="report-hero-meta">
+          <span className="report-pill">Excel workbook · 5 sheets</span>
+          <span className="report-pill muted-pill">
+            {filtersMeta?.filter_label || "All dates"}
+          </span>
+        </div>
       </section>
 
       {flash ? (
@@ -195,224 +227,298 @@ export default function CustomerReports() {
         </div>
       ) : null}
 
-      <section className="stat-grid report-stats">
+      <section className="stat-grid report-stats report-stats-premium">
         {cards.map((card) => (
-          <article key={card.label} className="stat-card">
+          <article key={card.label} className={`stat-card report-stat report-stat-${card.tone}`}>
             <p>{card.label}</p>
             <strong>
-              {loading ? "…" : card.raw ? card.value ?? 0 : formatMoney(card.value ?? 0)}
+              {loading
+                ? "…"
+                : card.raw
+                  ? card.value ?? 0
+                  : formatMoney(card.value ?? 0)}
             </strong>
           </article>
         ))}
       </section>
 
-      <section className="panel filters-bar report-filters">
-        <input
-          type="search"
-          placeholder="Search customer name"
-          value={searchName}
-          maxLength={100}
-          onChange={(event) => {
-            setPage(1);
-            setSearchName(event.target.value);
-          }}
-        />
-        <input
-          type="search"
-          inputMode="numeric"
-          placeholder="Search phone"
-          value={searchPhone}
-          maxLength={10}
-          onChange={(event) => {
-            setPage(1);
-            setSearchPhone(digitsOnly(event.target.value, 10));
-          }}
-        />
-        <select
-          value={status}
-          onChange={(event) => {
-            setPage(1);
-            setStatus(event.target.value);
-          }}
-        >
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-        <select
-          value={datePreset}
-          onChange={(event) => {
-            setPage(1);
-            setDatePreset(event.target.value);
-          }}
-        >
-          {DATE_PRESETS.map((item) => (
-            <option key={item.value || "all"} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        {datePreset === "custom" ? (
-          <>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(event) => {
-                setPage(1);
-                setDateFrom(event.target.value);
-              }}
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(event) => {
-                setPage(1);
-                setDateTo(event.target.value);
-              }}
-            />
-          </>
-        ) : null}
-      </section>
+      <section className="reports-main">
+          <section className="panel report-filters-panel">
+            <div className="report-section-head">
+              <div>
+                <h3>Find customers</h3>
+                <p className="muted">Search and filter the customer list before exporting.</p>
+              </div>
+              <button type="button" className="ghost-button" onClick={resetFilters}>
+                Reset filters
+              </button>
+            </div>
 
-      <section className="panel report-toolbar">
-        <div className="report-selection">
-          <strong>{selectedCount}</strong>
-          <span className="muted">selected</span>
-          {filtersMeta?.filter_label ? (
-            <span className="help-text">Date filter: {filtersMeta.filter_label}</span>
-          ) : null}
-        </div>
-        <div className="report-actions">
-          <button type="button" className="ghost-button" onClick={toggleAllPage} disabled={!customers.length}>
-            {allPageSelected ? "Unselect page" : "Select page"}
-          </button>
-          <button type="button" className="ghost-button" onClick={clearSelection} disabled={!selectedCount}>
-            Clear selection
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!selectedCount || Boolean(exporting)}
-            onClick={() => handleExport("selected")}
-          >
-            {exporting === "selected" ? "Exporting…" : "Export selected"}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={Boolean(exporting)}
-            onClick={() => handleExport("filtered")}
-          >
-            {exporting === "filtered" ? "Exporting…" : "Export filter results"}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={Boolean(exporting)}
-            onClick={() => handleExport("all")}
-          >
-            {exporting === "all" ? "Exporting…" : "Export all customers"}
-          </button>
-        </div>
-      </section>
-
-      <section className="panel table-panel">
-        <div className="table-wrap">
-          <table className="data-table report-table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={allPageSelected}
-                    onChange={toggleAllPage}
-                    aria-label="Select all on page"
-                    disabled={!customers.length}
-                  />
-                </th>
-                <th>Customer</th>
-                <th>Phone</th>
-                <th>Email</th>
-                <th>Bills</th>
-                <th>Billed</th>
-                <th>Paid</th>
-                <th>Outstanding</th>
-                <th>Created</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((customer) => (
-                <tr key={customer.id}>
-                  <td>
+            <div className="report-filters">
+              <label className="report-field">
+                <span>Customer name</span>
+                <input
+                  type="search"
+                  placeholder="Search by name"
+                  value={searchName}
+                  maxLength={100}
+                  onChange={(event) => {
+                    setPage(1);
+                    setSearchName(event.target.value);
+                  }}
+                />
+              </label>
+              <label className="report-field">
+                <span>Phone</span>
+                <input
+                  type="search"
+                  inputMode="numeric"
+                  placeholder="10-digit mobile"
+                  value={searchPhone}
+                  maxLength={10}
+                  onChange={(event) => {
+                    setPage(1);
+                    setSearchPhone(digitsOnly(event.target.value, 10));
+                  }}
+                />
+              </label>
+              <label className="report-field">
+                <span>Email</span>
+                <input
+                  type="search"
+                  placeholder="Search by email"
+                  value={searchEmail}
+                  maxLength={254}
+                  onChange={(event) => {
+                    setPage(1);
+                    setSearchEmail(event.target.value);
+                  }}
+                />
+              </label>
+              <label className="report-field">
+                <span>Status</span>
+                <select
+                  value={status}
+                  onChange={(event) => {
+                    setPage(1);
+                    setStatus(event.target.value);
+                  }}
+                >
+                  <option value="">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label className="report-field">
+                <span>Date range</span>
+                <select
+                  value={datePreset}
+                  onChange={(event) => {
+                    setPage(1);
+                    setDatePreset(event.target.value);
+                  }}
+                >
+                  {DATE_PRESETS.map((item) => (
+                    <option key={item.value || "all"} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {datePreset === "custom" ? (
+                <>
+                  <label className="report-field">
+                    <span>From</span>
                     <input
-                      type="checkbox"
-                      checked={selectedIds.has(customer.id)}
-                      onChange={() => toggleOne(customer.id)}
-                      aria-label={`Select ${customer.customer_name}`}
+                      type="date"
+                      value={dateFrom}
+                      onChange={(event) => {
+                        setPage(1);
+                        setDateFrom(event.target.value);
+                      }}
                     />
-                  </td>
-                  <td>
-                    <Link to={`/customers/${customer.id}`} className="text-link">
-                      {customer.customer_name}
-                    </Link>
-                  </td>
-                  <td>{customer.phone}</td>
-                  <td>{customer.email || "—"}</td>
-                  <td>{customer.total_bills}</td>
-                  <td>{formatMoney(customer.total_billed)}</td>
-                  <td>{formatMoney(customer.total_paid)}</td>
-                  <td className={customer.outstanding_balance > 0 ? "is-outstanding" : ""}>
-                    {formatMoney(customer.outstanding_balance)}
-                  </td>
-                  <td>{formatDate(customer.created_at)}</td>
-                  <td>
-                    <StatusBadge status={customer.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </label>
+                  <label className="report-field">
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(event) => {
+                        setPage(1);
+                        setDateTo(event.target.value);
+                      }}
+                    />
+                  </label>
+                </>
+              ) : null}
+            </div>
+            <p className="help-text">
+              Bills use bill date. Payments use payment date. Outstanding uses bill balances in that
+              bill-date range.
+            </p>
+          </section>
 
-        {loading ? <p className="muted">Loading customers…</p> : null}
-        {!loading && customers.length === 0 ? (
-          <p className="muted empty-state">No customers match the current filters.</p>
-        ) : null}
+          <section className="panel report-export-toolbar">
+            <div className="report-selection">
+              <strong>{selectedCount}</strong>
+              <span className="muted">selected · {pagination.total || 0} matching</span>
+            </div>
+            <div className="report-inline-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={toggleAllPage}
+                disabled={!customers.length}
+              >
+                {allPageSelected ? "Unselect page" : "Select all"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={clearSelection}
+                disabled={!selectedCount}
+              >
+                Clear selection
+              </button>
+            </div>
+            <div className="report-export-actions-inline">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!selectedCount || Boolean(exporting)}
+                onClick={() => handleExport("selected")}
+              >
+                {exporting === "selected" ? "Exporting…" : "Export Selected"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={Boolean(exporting)}
+                onClick={() => handleExport("filtered")}
+              >
+                {exporting === "filtered" ? "Exporting…" : "Export Filtered"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={Boolean(exporting)}
+                onClick={() => handleExport("all")}
+              >
+                {exporting === "all" ? "Exporting…" : "Export All"}
+              </button>
+            </div>
+            {exporting ? (
+              <p className="help-text export-progress">Preparing Excel workbook…</p>
+            ) : null}
+          </section>
 
-        {pagination.total_pages > 1 ? (
-          <div className="pagination-row">
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              Previous
-            </button>
-            <span className="muted">
-              Page {pagination.page} of {pagination.total_pages} · {pagination.total} customers
-            </span>
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={page >= pagination.total_pages || loading}
-              onClick={() => setPage((current) => current + 1)}
-            >
-              Next
-            </button>
-          </div>
-        ) : null}
+          <section className="panel table-panel report-table-panel">
+            <div className="report-section-head">
+              <div>
+                <h3>Customer list</h3>
+                <p className="muted">Select customers and export from the toolbar above.</p>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="data-table report-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={toggleAllPage}
+                        aria-label="Select all on page"
+                        disabled={!customers.length}
+                      />
+                    </th>
+                    <th>Customer Name</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Total Bills</th>
+                    <th>Total Billed</th>
+                    <th>Total Paid</th>
+                    <th>Outstanding</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.map((customer) => (
+                    <tr key={customer.id} className={selectedIds.has(customer.id) ? "is-selected" : ""}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(customer.id)}
+                          onChange={() => toggleOne(customer.id)}
+                          aria-label={`Select ${customer.customer_name}`}
+                        />
+                      </td>
+                      <td>
+                        <div className="report-customer-cell">
+                          <strong>{customer.customer_name}</strong>
+                          <StatusBadge status={customer.status} />
+                        </div>
+                      </td>
+                      <td>{customer.phone}</td>
+                      <td>{customer.email || "—"}</td>
+                      <td>{customer.total_bills}</td>
+                      <td>{formatMoney(customer.total_billed)}</td>
+                      <td className="is-paid">{formatMoney(customer.total_paid)}</td>
+                      <td className={customer.outstanding_balance > 0 ? "is-outstanding" : ""}>
+                        {formatMoney(customer.outstanding_balance)}
+                      </td>
+                      <td>
+                        <div className="report-row-actions">
+                          <Link to={`/customers/${customer.id}`} className="text-link">
+                            View
+                          </Link>
+                          <button
+                            type="button"
+                            className="text-link"
+                            disabled={Boolean(exporting)}
+                            onClick={() => handleExport("selected", [customer.id])}
+                          >
+                            Export
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {loading ? <p className="muted">Loading customers…</p> : null}
+            {!loading && customers.length === 0 ? (
+              <p className="muted empty-state">No customers match the current filters.</p>
+            ) : null}
+
+            {pagination.total_pages > 1 ? (
+              <div className="pagination-row">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  Previous
+                </button>
+                <span className="muted">
+                  Page {pagination.page} of {pagination.total_pages}
+                </span>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={page >= pagination.total_pages || loading}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
+          </section>
       </section>
     </main>
   );
-}
-
-function formatDate(value) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString("en-IN");
-  } catch {
-    return value;
-  }
 }
