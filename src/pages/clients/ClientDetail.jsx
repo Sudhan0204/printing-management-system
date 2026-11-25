@@ -6,6 +6,11 @@ import { clientLogoUrl } from "../../components/ClientForm";
 import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
 import { fetchClient, updateClientPassword, updateClientStatus } from "../../services/clients";
+import {
+  LIMITS,
+  passwordStrength,
+  validateStrongPassword,
+} from "../../utils/validate";
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -25,6 +30,7 @@ export default function ClientDetail() {
   });
   const [passwordError, setPasswordError] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -92,13 +98,12 @@ export default function ClientDetail() {
     event.preventDefault();
     setPasswordError("");
 
-    if (passwordForm.password.length < 8) {
-      setPasswordError("Password must be at least 8 characters.");
-      return;
-    }
-
-    if (passwordForm.password !== passwordForm.password_confirmation) {
-      setPasswordError("Passwords do not match.");
+    const passwordErrorMessage = validateStrongPassword(
+      passwordForm.password,
+      passwordForm.password_confirmation
+    );
+    if (passwordErrorMessage) {
+      setPasswordError(passwordErrorMessage);
       return;
     }
 
@@ -239,23 +244,43 @@ export default function ClientDetail() {
           <div className="form-grid">
             <div className="field">
               <label htmlFor="reset-password">New password</label>
-              <input
-                id="reset-password"
-                type="password"
-                autoComplete="new-password"
-                value={passwordForm.password}
-                onChange={(event) =>
-                  setPasswordForm((current) => ({ ...current, password: event.target.value }))
-                }
-                disabled={passwordBusy}
-              />
+              <div className="password-field">
+                <input
+                  id="reset-password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  maxLength={LIMITS.password.max}
+                  value={passwordForm.password}
+                  onChange={(event) =>
+                    setPasswordForm((current) => ({ ...current, password: event.target.value }))
+                  }
+                  disabled={passwordBusy}
+                  className={passwordError ? "is-invalid" : ""}
+                />
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  disabled={passwordBusy}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              {passwordForm.password ? (
+                <p
+                  className={`help-text strength-${passwordStrength(passwordForm.password).label.toLowerCase()}`}
+                >
+                  Password strength: {passwordStrength(passwordForm.password).label}
+                </p>
+              ) : null}
             </div>
             <div className="field">
               <label htmlFor="reset-password-confirm">Confirm password</label>
               <input
                 id="reset-password-confirm"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
+                maxLength={LIMITS.password.max}
                 value={passwordForm.password_confirmation}
                 onChange={(event) =>
                   setPasswordForm((current) => ({
@@ -264,6 +289,7 @@ export default function ClientDetail() {
                   }))
                 }
                 disabled={passwordBusy}
+                className={passwordError ? "is-invalid" : ""}
               />
             </div>
           </div>

@@ -4,6 +4,15 @@ import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
 import { createProduct, fetchProduct, updateProduct } from "../../services/products";
 import { PRICING_TYPES, UNITS } from "../../utils/billingCalc";
+import {
+  LIMITS,
+  firstErrorKey,
+  focusField,
+  mapApiErrors,
+  validateLength,
+  validateMoney,
+  validateName,
+} from "../../utils/validate";
 
 const EMPTY = {
   product_name: "",
@@ -22,6 +31,7 @@ export default function ProductFormPage({ mode = "create" }) {
   const { csrfToken, clearSession } = useAuth();
   const [values, setValues] = useState(EMPTY);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(mode === "edit");
   const [submitting, setSubmitting] = useState(false);
@@ -64,15 +74,54 @@ export default function ProductFormPage({ mode = "create" }) {
     };
   }, [mode, id, clearSession, navigate]);
 
-  function validate() {
+  function validate(nextValues = values) {
     const errors = {};
-    if (!values.product_name.trim()) errors.product_name = "Product name is required.";
+
+    const nameError = validateName(nextValues.product_name, "Product name", LIMITS.product_name);
+    if (nameError) errors.product_name = nameError;
+
+    const categoryError = validateLength(nextValues.category, {
+      ...LIMITS.category,
+      label: "Category",
+      required: false,
+    });
+    if (categoryError) errors.category = categoryError;
+
+    const descriptionError = validateLength(nextValues.description, {
+      ...LIMITS.description,
+      label: "Description",
+      required: false,
+    });
+    if (descriptionError) errors.description = descriptionError;
+
     if (mode === "create") {
-      if (values.initial_rate === "" || Number(values.initial_rate) < 0) {
-        errors.initial_rate = "Enter a valid initial rate.";
+      const rateError = validateMoney(nextValues.initial_rate, "Initial rate", { allowZero: true });
+      if (rateError) errors.initial_rate = rateError;
+
+      if (!nextValues.effective_from) {
+        errors.effective_from = "Effective from date is required.";
       }
     }
+
     return errors;
+  }
+
+  function updateField(field, value) {
+    setValues((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function handleBlur(field) {
+    setTouched((current) => ({ ...current, [field]: true }));
+    const message = validate()[field];
+    if (message) {
+      setFieldErrors((current) => ({ ...current, [field]: message }));
+    }
   }
 
   async function handleSubmit(event) {
@@ -80,7 +129,18 @@ export default function ProductFormPage({ mode = "create" }) {
     setError("");
     const errors = validate();
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    setTouched({
+      product_name: true,
+      category: true,
+      description: true,
+      initial_rate: true,
+      effective_from: true,
+    });
+
+    if (Object.keys(errors).length > 0) {
+      focusField(firstErrorKey(errors));
+      return;
+    }
 
     setSubmitting(true);
     const payload = {
@@ -109,7 +169,14 @@ export default function ProductFormPage({ mode = "create" }) {
         });
       }
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "Could not save product."));
+      const mapped = mapApiErrors(requestError);
+      if (mapped.form) setError(mapped.form);
+      const { form, ...rest } = mapped;
+      setFieldErrors(rest);
+      if (firstErrorKey(rest)) focusField(firstErrorKey(rest));
+      if (!mapped.form && !Object.keys(rest).length) {
+        setError(getErrorMessage(requestError, "Could not save product."));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -147,12 +214,17 @@ export default function ProductFormPage({ mode = "create" }) {
             <label htmlFor="product_name">Product name</label>
             <input
               id="product_name"
+              name="product_name"
+              maxLength={LIMITS.product_name.max}
               value={values.product_name}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, product_name: event.target.value }))
-              }
+              onChange={(event) => updateField("product_name", event.target.value)}
+              onBlur={() => handleBlur("product_name")}
+              className={touched.product_name && fieldErrors.product_name ? "is-invalid" : ""}
             />
-            {fieldErrors.product_name ? (
+            <p className="help-text char-count">
+              {values.product_name.length}/{LIMITS.product_name.max}
+            </p>
+            {touched.product_name && fieldErrors.product_name ? (
               <p className="field-error">{fieldErrors.product_name}</p>
             ) : null}
           </div>
@@ -160,20 +232,27 @@ export default function ProductFormPage({ mode = "create" }) {
             <label htmlFor="category">Category (optional)</label>
             <input
               id="category"
+              name="category"
+              maxLength={LIMITS.category.max}
               value={values.category}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, category: event.target.value }))
-              }
+              onChange={(event) => updateField("category", event.target.value)}
+              onBlur={() => handleBlur("category")}
+              className={touched.category && fieldErrors.category ? "is-invalid" : ""}
             />
+            <p className="help-text char-count">
+              {values.category.length}/{LIMITS.category.max}
+            </p>
+            {touched.category && fieldErrors.category ? (
+              <p className="field-error">{fieldErrors.category}</p>
+            ) : null}
           </div>
           <div className="field">
             <label htmlFor="unit">Unit</label>
             <select
               id="unit"
+              name="unit"
               value={values.unit}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, unit: event.target.value }))
-              }
+              onChange={(event) => updateField("unit", event.target.value)}
             >
               {UNITS.map((unit) => (
                 <option key={unit.value} value={unit.value}>
@@ -186,10 +265,9 @@ export default function ProductFormPage({ mode = "create" }) {
             <label htmlFor="pricing_type">Pricing type</label>
             <select
               id="pricing_type"
+              name="pricing_type"
               value={values.pricing_type}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, pricing_type: event.target.value }))
-              }
+              onChange={(event) => updateField("pricing_type", event.target.value)}
             >
               {PRICING_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -204,15 +282,16 @@ export default function ProductFormPage({ mode = "create" }) {
                 <label htmlFor="initial_rate">Initial rate (₹)</label>
                 <input
                   id="initial_rate"
+                  name="initial_rate"
                   type="number"
                   min="0"
                   step="0.01"
                   value={values.initial_rate}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, initial_rate: event.target.value }))
-                  }
+                  onChange={(event) => updateField("initial_rate", event.target.value)}
+                  onBlur={() => handleBlur("initial_rate")}
+                  className={touched.initial_rate && fieldErrors.initial_rate ? "is-invalid" : ""}
                 />
-                {fieldErrors.initial_rate ? (
+                {touched.initial_rate && fieldErrors.initial_rate ? (
                   <p className="field-error">{fieldErrors.initial_rate}</p>
                 ) : null}
               </div>
@@ -220,12 +299,18 @@ export default function ProductFormPage({ mode = "create" }) {
                 <label htmlFor="effective_from">Effective from</label>
                 <input
                   id="effective_from"
+                  name="effective_from"
                   type="date"
                   value={values.effective_from}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, effective_from: event.target.value }))
+                  onChange={(event) => updateField("effective_from", event.target.value)}
+                  onBlur={() => handleBlur("effective_from")}
+                  className={
+                    touched.effective_from && fieldErrors.effective_from ? "is-invalid" : ""
                   }
                 />
+                {touched.effective_from && fieldErrors.effective_from ? (
+                  <p className="field-error">{fieldErrors.effective_from}</p>
+                ) : null}
               </div>
             </>
           ) : null}
@@ -233,12 +318,20 @@ export default function ProductFormPage({ mode = "create" }) {
             <label htmlFor="description">Description (optional)</label>
             <textarea
               id="description"
+              name="description"
               rows={3}
+              maxLength={LIMITS.description.max}
               value={values.description}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, description: event.target.value }))
-              }
+              onChange={(event) => updateField("description", event.target.value)}
+              onBlur={() => handleBlur("description")}
+              className={touched.description && fieldErrors.description ? "is-invalid" : ""}
             />
+            <p className="help-text char-count">
+              {values.description.length}/{LIMITS.description.max}
+            </p>
+            {touched.description && fieldErrors.description ? (
+              <p className="field-error">{fieldErrors.description}</p>
+            ) : null}
           </div>
           <div className="field">
             <label>Status</label>
@@ -247,7 +340,7 @@ export default function ProductFormPage({ mode = "create" }) {
                 <input
                   type="radio"
                   checked={values.status === "active"}
-                  onChange={() => setValues((current) => ({ ...current, status: "active" }))}
+                  onChange={() => updateField("status", "active")}
                 />
                 Active
               </label>
@@ -255,7 +348,7 @@ export default function ProductFormPage({ mode = "create" }) {
                 <input
                   type="radio"
                   checked={values.status === "inactive"}
-                  onChange={() => setValues((current) => ({ ...current, status: "inactive" }))}
+                  onChange={() => updateField("status", "inactive")}
                 />
                 Inactive
               </label>

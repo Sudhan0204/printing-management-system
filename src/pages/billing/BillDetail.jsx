@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import StatusBadge from "../../components/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
 import { fetchBill } from "../../services/bills";
@@ -64,10 +65,21 @@ export default function BillDetail() {
           <p className="eyebrow">Bill</p>
           <h2>{bill.bill_number}</h2>
           <p className="muted">Dated {bill.bill_date}</p>
+          <StatusBadge status={bill.payment_status} />
         </div>
-        <Link to="/billing" className="ghost-button link-button">
-          Back to bills
-        </Link>
+        <div className="row-actions">
+          {bill.payment_status !== "paid" ? (
+            <Link
+              to={`/payments/receive?customer_id=${bill.customer.id}&bill_id=${bill.id}`}
+              className="primary-button link-button"
+            >
+              Receive payment
+            </Link>
+          ) : null}
+          <Link to="/billing" className="ghost-button link-button">
+            Back to bills
+          </Link>
+        </div>
       </section>
 
       {flash ? <div className="success-banner">{flash}</div> : null}
@@ -84,13 +96,22 @@ export default function BillDetail() {
           <p className="muted">{bill.customer.phone}</p>
         </article>
         <article className="panel">
-          <p className="eyebrow">Total amount</p>
+          <p className="eyebrow">Bill total</p>
           <strong>{formatMoney(bill.total_amount)}</strong>
           <p className="muted">Qty {bill.total_quantity}</p>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">Paid</p>
+          <strong>{formatMoney(bill.paid_amount)}</strong>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">Outstanding</p>
+          <strong>{formatMoney(bill.balance_amount)}</strong>
         </article>
       </section>
 
       <section className="panel table-panel">
+        <h3>Line items</h3>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -127,6 +148,42 @@ export default function BillDetail() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="panel table-panel">
+        <h3>Payment history</h3>
+        {(bill.payments || []).length === 0 ? (
+          <p className="muted">No payments recorded for this bill yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Method</th>
+                  <th>Reference</th>
+                  <th>Amount</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {bill.payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td>{payment.payment_date}</td>
+                    <td>{payment.payment_method_label}</td>
+                    <td>{payment.reference_number || "—"}</td>
+                    <td>{formatMoney(payment.amount)}</td>
+                    <td>
+                      <Link to={`/payments/${payment.id}`} className="text-link">
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );

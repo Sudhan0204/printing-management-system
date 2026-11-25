@@ -6,8 +6,12 @@ import { assetUrl, getErrorMessage } from "../services/api";
 const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", end: true },
   { label: "Customers", to: "/customers" },
-  { label: "Products", to: "/products" },
+  { label: "Products & Rates", to: "/products" },
   { label: "Billing", to: "/billing" },
+  { label: "Payments", to: "/payments" },
+  { label: "Expenses", to: "/expenses", disabled: true },
+  { label: "Reports", to: "/reports", disabled: true },
+  { label: "Settings", to: "/settings", disabled: true },
 ];
 
 export default function TenantLayout() {
@@ -49,18 +53,24 @@ export default function TenantLayout() {
         </div>
 
         <nav aria-label="Primary" onClick={() => setMenuOpen(false)}>
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                isActive ? "nav-link is-active" : "nav-link"
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {NAV_ITEMS.map((item) =>
+            item.disabled ? (
+              <span key={item.label} className="nav-link is-disabled" title="Coming soon">
+                {item.label}
+              </span>
+            ) : (
+              <NavLink
+                key={item.label}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  isActive ? "nav-link is-active" : "nav-link"
+                }
+              >
+                {item.label}
+              </NavLink>
+            )
+          )}
         </nav>
 
         <section className="profile">

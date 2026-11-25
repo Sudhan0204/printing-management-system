@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
 import { createProductRate, fetchProductRates } from "../../services/products";
 import { formatMoney } from "../../utils/billingCalc";
+import { validateMoney } from "../../utils/validate";
 
 export default function ProductRates() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function ProductRates() {
   const [flash, setFlash] = useState(location.state?.flash || "");
   const [rate, setRate] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [fieldError, setFieldError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function load() {
@@ -47,9 +49,16 @@ export default function ProductRates() {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    setFieldError("");
 
-    if (rate === "" || Number(rate) < 0) {
-      setError("Enter a valid rate.");
+    const rateError = validateMoney(rate, "Rate", { allowZero: true });
+    if (rateError) {
+      setFieldError(rateError);
+      return;
+    }
+
+    if (!effectiveFrom) {
+      setFieldError("Effective from date is required.");
       return;
     }
 
@@ -62,6 +71,7 @@ export default function ProductRates() {
       );
       setFlash("New rate saved. Previous rates remain in history.");
       setRate("");
+      setFieldError("");
       await load();
     } catch (requestError) {
       setError(getErrorMessage(requestError, "Could not save rate."));
@@ -107,18 +117,25 @@ export default function ProductRates() {
             <label htmlFor="rate">New rate (₹)</label>
             <input
               id="rate"
+              name="rate"
               type="number"
               min="0"
               step="0.01"
               value={rate}
-              onChange={(event) => setRate(event.target.value)}
+              onChange={(event) => {
+                setRate(event.target.value);
+                setFieldError("");
+              }}
               disabled={submitting}
+              className={fieldError ? "is-invalid" : ""}
             />
+            {fieldError ? <p className="field-error">{fieldError}</p> : null}
           </div>
           <div className="field">
             <label htmlFor="effective_from">Effective from</label>
             <input
               id="effective_from"
+              name="effective_from"
               type="date"
               value={effectiveFrom}
               onChange={(event) => setEffectiveFrom(event.target.value)}

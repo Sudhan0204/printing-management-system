@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import StatusBadge from "../../components/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
 import { fetchBills } from "../../services/bills";
@@ -11,6 +12,7 @@ export default function BillsList() {
   const [bills, setBills] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0 });
   const [search, setSearch] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -21,7 +23,12 @@ export default function BillsList() {
       setLoading(true);
       setError("");
       try {
-        const response = await fetchBills({ search, page, per_page: 10 });
+        const response = await fetchBills({
+          search,
+          payment_status: paymentStatus || undefined,
+          page,
+          per_page: 10,
+        });
         if (!active) return;
         setBills(response.data.bills || []);
         setPagination(response.data.pagination || { page: 1, total_pages: 1, total: 0 });
@@ -42,7 +49,7 @@ export default function BillsList() {
       active = false;
       clearTimeout(timer);
     };
-  }, [search, page, clearSession, navigate]);
+  }, [search, paymentStatus, page, clearSession, navigate]);
 
   return (
     <main className="dashboard">
@@ -67,6 +74,18 @@ export default function BillsList() {
             setSearch(event.target.value);
           }}
         />
+        <select
+          value={paymentStatus}
+          onChange={(event) => {
+            setPage(1);
+            setPaymentStatus(event.target.value);
+          }}
+        >
+          <option value="">All payment statuses</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partially_paid">Partially paid</option>
+          <option value="paid">Paid</option>
+        </select>
       </section>
 
       {error ? (
@@ -97,6 +116,8 @@ export default function BillsList() {
                     <th>Customer</th>
                     <th>Date</th>
                     <th>Amount</th>
+                    <th>Balance</th>
+                    <th>Payment</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -112,10 +133,24 @@ export default function BillsList() {
                       </td>
                       <td>{bill.bill_date}</td>
                       <td>{formatMoney(bill.total_amount)}</td>
+                      <td>{formatMoney(bill.balance_amount)}</td>
                       <td>
-                        <Link to={`/billing/${bill.id}`} className="text-link">
-                          View
-                        </Link>
+                        <StatusBadge status={bill.payment_status} />
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <Link to={`/billing/${bill.id}`} className="text-link">
+                            View
+                          </Link>
+                          {bill.payment_status !== "paid" ? (
+                            <Link
+                              to={`/payments/receive?customer_id=${bill.customer.id}&bill_id=${bill.id}`}
+                              className="text-link"
+                            >
+                              Pay
+                            </Link>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}

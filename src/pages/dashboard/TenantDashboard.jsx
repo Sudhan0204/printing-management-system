@@ -84,10 +84,10 @@ export default function TenantDashboard() {
           <strong>Create</strong>
           <span>Multi-product bills</span>
         </Link>
-        <Link to="/billing" className="stat-card action-card">
-          <p>Bills</p>
-          <strong>History</strong>
-          <span>View saved bills</span>
+        <Link to="/payments/receive" className="stat-card action-card">
+          <p>Payments</p>
+          <strong>Collect</strong>
+          <span>Partial or full payments</span>
         </Link>
       </section>
     </main>

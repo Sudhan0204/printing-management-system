@@ -25,6 +25,9 @@ import TenantDashboard from "../pages/dashboard/TenantDashboard";
 import ProductFormPage from "../pages/products/ProductFormPage";
 import ProductRates from "../pages/products/ProductRates";
 import ProductsList from "../pages/products/ProductsList";
+import PaymentDetail from "../pages/payments/PaymentDetail";
+import PaymentsDashboard from "../pages/payments/PaymentsDashboard";
+import ReceivePayment from "../pages/payments/ReceivePayment";
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
@@ -102,6 +105,9 @@ export default function AppRoutes() {
         <Route path="/billing" element={<BillsList />} />
         <Route path="/billing/create" element={<BillCreate />} />
         <Route path="/billing/:id" element={<BillDetail />} />
+        <Route path="/payments" element={<PaymentsDashboard />} />
+        <Route path="/payments/receive" element={<ReceivePayment />} />
+        <Route path="/payments/:id" element={<PaymentDetail />} />
       </Route>
 
       <Route path="*" element={<HomeRedirect />} />
