@@ -1,13 +1,21 @@
-import { Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { assetUrl, getErrorMessage } from "../services/api";
+
+const NAV_ITEMS = [
+  { label: "Dashboard", to: "/dashboard", end: true },
+  { label: "Customers", to: "/customers" },
+  { label: "Products", to: "/products" },
+  { label: "Billing", to: "/billing" },
+];
 
 export default function TenantLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const businessName = user?.tenant?.business_name || "Your business";
   const logoUrl = user?.tenant?.logo_url || assetUrl(user?.tenant?.logo);
@@ -26,7 +34,7 @@ export default function TenantLayout() {
   }
 
   return (
-    <div className="shell tenant-shell">
+    <div className={`shell tenant-shell ${menuOpen ? "menu-open" : ""}`}>
       <aside className="sidebar tenant-sidebar">
         <div className="brand">
           {logoUrl ? (
@@ -40,23 +48,53 @@ export default function TenantLayout() {
           </div>
         </div>
 
-        <nav aria-label="Primary">
-          <span className="nav-link is-active">Dashboard</span>
+        <nav aria-label="Primary" onClick={() => setMenuOpen(false)}>
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.label}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                isActive ? "nav-link is-active" : "nav-link"
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
         <section className="profile">
           <p className="profile-label">Signed in as</p>
           <strong>{user?.name}</strong>
           <p>{user?.email}</p>
-          <span className="role-badge">{user?.role?.replace("_", " ")}</span>
+          <span className="role-badge">{user?.role?.replaceAll("_", " ")}</span>
         </section>
       </aside>
 
+      {menuOpen ? (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
+
       <div className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Workspace</p>
-            <h1>{businessName}</h1>
+          <div className="topbar-start">
+            <button
+              type="button"
+              className="ghost-button menu-toggle"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+            >
+              Menu
+            </button>
+            <div>
+              <p className="eyebrow">Workspace</p>
+              <h1>{businessName}</h1>
+            </div>
           </div>
           <button
             type="button"

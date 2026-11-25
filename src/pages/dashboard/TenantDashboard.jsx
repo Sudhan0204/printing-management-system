@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { assetUrl, getErrorMessage } from "../../services/api";
 import { fetchTenantDashboard } from "../../services/auth";
@@ -17,32 +17,24 @@ export default function TenantDashboard() {
     async function load() {
       try {
         const response = await fetchTenantDashboard();
-
         if (active) {
           setDashboard(response.data.dashboard);
           setError("");
         }
       } catch (requestError) {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         if (requestError?.response?.status === 401 || requestError?.response?.status === 403) {
           clearSession();
           navigate("/login", { replace: true });
           return;
         }
-
         setError(getErrorMessage(requestError, "Could not load dashboard."));
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
     load();
-
     return () => {
       active = false;
     };
@@ -63,10 +55,7 @@ export default function TenantDashboard() {
           <div>
             <p className="eyebrow">Business dashboard</p>
             <h2>{businessName}</h2>
-            <p>
-              Signed in as {user?.name}. Orders, invoices, and production tools will appear here in
-              later phases.
-            </p>
+            <p>Signed in as {user?.name}. Manage customers, products, rates, and bills.</p>
           </div>
         </div>
       </section>
@@ -79,18 +68,28 @@ export default function TenantDashboard() {
 
       {loading ? <p className="muted">Loading business details…</p> : null}
 
-      {!loading && dashboard ? (
-        <section className="detail-grid">
-          <article className="panel">
-            <p className="eyebrow">Owner</p>
-            <strong>{dashboard.owner_name}</strong>
-          </article>
-          <article className="panel">
-            <p className="eyebrow">Status</p>
-            <span className={`status-badge is-${dashboard.status}`}>{dashboard.status}</span>
-          </article>
-        </section>
-      ) : null}
+      <section className="stat-grid tenant-actions">
+        <Link to="/customers" className="stat-card action-card">
+          <p>Customers</p>
+          <strong>Manage</strong>
+          <span>Add and search your clients</span>
+        </Link>
+        <Link to="/products" className="stat-card action-card">
+          <p>Products</p>
+          <strong>Catalog</strong>
+          <span>Dynamic products and units</span>
+        </Link>
+        <Link to="/billing/create" className="stat-card action-card">
+          <p>Billing</p>
+          <strong>Create</strong>
+          <span>Multi-product bills</span>
+        </Link>
+        <Link to="/billing" className="stat-card action-card">
+          <p>Bills</p>
+          <strong>History</strong>
+          <span>View saved bills</span>
+        </Link>
+      </section>
     </main>
   );
 }

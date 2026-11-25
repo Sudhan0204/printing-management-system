@@ -1,21 +1,30 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import GuestRoute from "../components/GuestRoute";
+import LoadingScreen from "../components/LoadingScreen";
 import {
   AdminProtectedRoute,
   TenantProtectedRoute,
 } from "../components/ProtectedRoute";
+import { useAuth } from "../context/AuthContext";
 import DashboardLayout from "../layouts/DashboardLayout";
 import TenantLayout from "../layouts/TenantLayout";
 import AdminLogin from "../pages/auth/AdminLogin";
 import TenantLogin from "../pages/auth/TenantLogin";
+import BillCreate from "../pages/billing/BillCreate";
+import BillDetail from "../pages/billing/BillDetail";
+import BillsList from "../pages/billing/BillsList";
 import ClientCreate from "../pages/clients/ClientCreate";
 import ClientDetail from "../pages/clients/ClientDetail";
 import ClientEdit from "../pages/clients/ClientEdit";
 import ClientsList from "../pages/clients/ClientsList";
+import CustomerDetail from "../pages/customers/CustomerDetail";
+import CustomerFormPage from "../pages/customers/CustomerFormPage";
+import CustomersList from "../pages/customers/CustomersList";
 import Dashboard from "../pages/dashboard/Dashboard";
 import TenantDashboard from "../pages/dashboard/TenantDashboard";
-import { useAuth } from "../context/AuthContext";
-import LoadingScreen from "../components/LoadingScreen";
+import ProductFormPage from "../pages/products/ProductFormPage";
+import ProductRates from "../pages/products/ProductRates";
+import ProductsList from "../pages/products/ProductsList";
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
@@ -75,14 +84,24 @@ export default function AppRoutes() {
       </Route>
 
       <Route
-        path="/dashboard"
         element={
           <TenantProtectedRoute>
             <TenantLayout />
           </TenantProtectedRoute>
         }
       >
-        <Route index element={<TenantDashboard />} />
+        <Route path="/dashboard" element={<TenantDashboard />} />
+        <Route path="/customers" element={<CustomersList />} />
+        <Route path="/customers/create" element={<CustomerFormPage mode="create" />} />
+        <Route path="/customers/:id" element={<CustomerDetail />} />
+        <Route path="/customers/:id/edit" element={<CustomerFormPage mode="edit" />} />
+        <Route path="/products" element={<ProductsList />} />
+        <Route path="/products/create" element={<ProductFormPage mode="create" />} />
+        <Route path="/products/:id/edit" element={<ProductFormPage mode="edit" />} />
+        <Route path="/products/:id/rates" element={<ProductRates />} />
+        <Route path="/billing" element={<BillsList />} />
+        <Route path="/billing/create" element={<BillCreate />} />
+        <Route path="/billing/:id" element={<BillDetail />} />
       </Route>
 
       <Route path="*" element={<HomeRedirect />} />
