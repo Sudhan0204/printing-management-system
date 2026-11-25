@@ -210,6 +210,31 @@ textarea:focus {
   font-size: 0.92rem;
 }
 
+input.is-invalid,
+textarea.is-invalid,
+select.is-invalid {
+  border-color: var(--danger-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger-text) 35%, transparent);
+}
+
+.char-count {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.strength-weak {
+  color: var(--danger-text);
+}
+
+.strength-medium {
+  color: #a16207;
+}
+
+.strength-strong {
+  color: var(--success-text);
+}
+
 .form-banner,
 .success-banner {
   border-radius: 10px;
@@ -357,6 +382,48 @@ nav {
 .status-badge.is-draft {
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.status-badge.is-unpaid {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.status-badge.is-partially_paid {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.status-badge.is-paid {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid {
+  border-color: #f87171;
+  outline-color: #fecaca;
+}
+
+.payment-filters {
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+}
+
+.payment-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.strength-weak {
+  color: var(--danger-text);
+}
+
+.strength-medium {
+  color: #9a3412;
+}
+
+.strength-strong {
+  color: #065f46;
 }
 
 textarea {
@@ -785,6 +852,11 @@ textarea {
 
 @media (max-width: 980px) {
   .bill-row-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .payment-filters,
+  .payment-stats {
     grid-template-columns: 1fr 1fr;
   }
 }

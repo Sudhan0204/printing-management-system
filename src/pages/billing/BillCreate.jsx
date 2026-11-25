@@ -6,6 +6,7 @@ import { createBill } from "../../services/bills";
 import { fetchCustomers } from "../../services/customers";
 import { fetchProducts } from "../../services/products";
 import { calculateLine, formatMoney, unitLabel } from "../../utils/billingCalc";
+import { validateMoney, validatePositiveNumber } from "../../utils/validate";
 
 function emptyRow() {
   return {
@@ -138,9 +139,52 @@ export default function BillCreate() {
       return;
     }
 
+    if (!billDate) {
+      setError("Enter a valid bill date.");
+      return;
+    }
+
+    if (computedRows.length === 0) {
+      setError("Add at least one product.");
+      return;
+    }
+
     if (computedRows.some((row) => !row.product)) {
       setError("Select a product for every line.");
       return;
+    }
+
+    for (const row of computedRows) {
+      const rateValue = row.rate === "" ? row.product.current_rate : row.rate;
+      const rateError = validateMoney(rateValue, "Rate", { allowZero: true });
+      if (rateError) {
+        setError(`${row.product.product_name}: ${rateError}`);
+        return;
+      }
+
+      const qtyError = validatePositiveNumber(row.quantity, "Quantity", {
+        allowZero: false,
+        maxDecimals: 4,
+      });
+      if (qtyError) {
+        setError(`${row.product.product_name}: ${qtyError}`);
+        return;
+      }
+
+      if (row.product.pricing_type === "dimension_based") {
+        const widthError = validatePositiveNumber(row.width, "Width", {
+          allowZero: false,
+          maxDecimals: 2,
+        });
+        const heightError = validatePositiveNumber(row.height, "Height", {
+          allowZero: false,
+          maxDecimals: 2,
+        });
+        if (widthError || heightError) {
+          setError(`${row.product.product_name}: ${widthError || heightError}`);
+          return;
+        }
+      }
     }
 
     if (computedRows.some((row) => row.calc.error)) {

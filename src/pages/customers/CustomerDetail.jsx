@@ -5,6 +5,7 @@ import StatusBadge from "../../components/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
 import { fetchCustomer, updateCustomerStatus } from "../../services/customers";
+import { formatMoney } from "../../utils/billingCalc";
 
 export default function CustomerDetail() {
   const { id } = useParams();
@@ -12,6 +13,9 @@ export default function CustomerDetail() {
   const location = useLocation();
   const { csrfToken, clearSession } = useAuth();
   const [customer, setCustomer] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [bills, setBills] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState(location.state?.flash || "");
@@ -23,7 +27,11 @@ export default function CustomerDetail() {
     async function load() {
       try {
         const response = await fetchCustomer(id);
-        if (active) setCustomer(response.data.customer);
+        if (!active) return;
+        setCustomer(response.data.customer);
+        setSummary(response.data.payment_summary || null);
+        setBills(response.data.bills || []);
+        setPayments(response.data.payments || []);
       } catch (requestError) {
         if (!active) return;
         if (requestError?.response?.status === 401 || requestError?.response?.status === 403) {
@@ -84,7 +92,13 @@ export default function CustomerDetail() {
           <StatusBadge status={customer.status} />
         </div>
         <div className="row-actions">
-          <Link to={`/customers/${customer.id}/edit`} className="primary-button link-button">
+          <Link
+            to={`/payments/receive?customer_id=${customer.id}`}
+            className="primary-button link-button"
+          >
+            Receive payment
+          </Link>
+          <Link to={`/customers/${customer.id}/edit`} className="ghost-button link-button">
             Edit
           </Link>
           <button
@@ -115,16 +129,98 @@ export default function CustomerDetail() {
           <p className="eyebrow">Email</p>
           <strong>{customer.email || "—"}</strong>
         </article>
-        <article className="panel span-2">
-          <p className="eyebrow">Address</p>
+        <article className="panel">
+          <p className="eyebrow">Total billed</p>
+          <strong>{formatMoney(summary?.total_billed || 0)}</strong>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">Total paid</p>
+          <strong>{formatMoney(summary?.total_paid || 0)}</strong>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">Outstanding</p>
+          <strong>{formatMoney(summary?.outstanding_balance || 0)}</strong>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">City / Address</p>
           <strong>
             {[customer.address, customer.city].filter(Boolean).join(", ") || "—"}
           </strong>
         </article>
-        <article className="panel span-2">
-          <p className="eyebrow">Notes</p>
-          <strong>{customer.notes || "—"}</strong>
-        </article>
+      </section>
+
+      <section className="panel table-panel">
+        <h3>Related bills</h3>
+        {bills.length === 0 ? (
+          <p className="muted">No bills yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Bill</th>
+                  <th>Date</th>
+                  <th>Total</th>
+                  <th>Paid</th>
+                  <th>Balance</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bills.map((bill) => (
+                  <tr key={bill.id}>
+                    <td>
+                      <Link to={`/billing/${bill.id}`} className="text-link">
+                        {bill.bill_number}
+                      </Link>
+                    </td>
+                    <td>{bill.bill_date}</td>
+                    <td>{formatMoney(bill.total_amount)}</td>
+                    <td>{formatMoney(bill.paid_amount)}</td>
+                    <td>{formatMoney(bill.balance_amount)}</td>
+                    <td>
+                      <StatusBadge status={bill.payment_status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="panel table-panel">
+        <h3>Payment history</h3>
+        {payments.length === 0 ? (
+          <p className="muted">No payments yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Bill</th>
+                  <th>Method</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td>{payment.payment_date}</td>
+                    <td>
+                      <Link to={`/billing/${payment.bill_id}`} className="text-link">
+                        {payment.bill_number}
+                      </Link>
+                    </td>
+                    <td>{payment.payment_method_label}</td>
+                    <td>{formatMoney(payment.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <ConfirmDialog

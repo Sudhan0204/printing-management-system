@@ -1,7 +1,17 @@
-export default function StatusBadge({ status }) {
-  const normalized = ["suspended", "inactive", "active", "saved", "draft"].includes(status)
-    ? status
-    : "active";
+const LABELS = {
+  active: "active",
+  inactive: "inactive",
+  suspended: "suspended",
+  saved: "saved",
+  draft: "draft",
+  unpaid: "unpaid",
+  partially_paid: "partial",
+  paid: "paid",
+};
 
-  return <span className={`status-badge is-${normalized}`}>{normalized}</span>;
+export default function StatusBadge({ status }) {
+  const normalized = LABELS[status] ? status : "active";
+  const label = LABELS[normalized] || normalized;
+
+  return <span className={`status-badge is-${normalized}`}>{label}</span>;
 }

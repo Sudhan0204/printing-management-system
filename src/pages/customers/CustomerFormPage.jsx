@@ -7,6 +7,18 @@ import {
   fetchCustomer,
   updateCustomer,
 } from "../../services/customers";
+import {
+  LIMITS,
+  digitsOnly,
+  firstErrorKey,
+  focusField,
+  mapApiErrors,
+  normalizePhone,
+  validateEmail,
+  validateIndianMobile,
+  validateLength,
+  validateName,
+} from "../../utils/validate";
 
 const EMPTY = {
   customer_name: "",
@@ -24,6 +36,7 @@ export default function CustomerFormPage({ mode = "create" }) {
   const { csrfToken, clearSession } = useAuth();
   const [values, setValues] = useState(EMPTY);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(mode === "edit");
   const [submitting, setSubmitting] = useState(false);
@@ -65,17 +78,58 @@ export default function CustomerFormPage({ mode = "create" }) {
     };
   }, [mode, id, clearSession, navigate]);
 
-  function validate() {
+  function validate(nextValues = values) {
     const errors = {};
-    if (!values.customer_name.trim()) errors.customer_name = "Name is required.";
-    if (!values.phone.trim()) errors.phone = "Phone is required.";
-    else if (!/^[0-9+\-]{7,20}$/.test(values.phone.replace(/\s+/g, ""))) {
-      errors.phone = "Enter a valid phone number.";
-    }
-    if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
-      errors.email = "Enter a valid email.";
-    }
+
+    const nameError = validateName(nextValues.customer_name, "Customer name", LIMITS.customer_name);
+    if (nameError) errors.customer_name = nameError;
+
+    const phoneError = validateIndianMobile(nextValues.phone);
+    if (phoneError) errors.phone = phoneError;
+
+    const emailError = validateEmail(nextValues.email, false);
+    if (emailError) errors.email = emailError;
+
+    const addressError = validateLength(nextValues.address, {
+      ...LIMITS.address,
+      label: "Address",
+      required: false,
+    });
+    if (addressError) errors.address = addressError;
+
+    const cityError = validateLength(nextValues.city, {
+      ...LIMITS.city,
+      label: "City",
+      required: false,
+    });
+    if (cityError) errors.city = cityError;
+
+    const notesError = validateLength(nextValues.notes, {
+      ...LIMITS.notes,
+      label: "Notes",
+      required: false,
+    });
+    if (notesError) errors.notes = notesError;
+
     return errors;
+  }
+
+  function updateField(field, value) {
+    setValues((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function handleBlur(field) {
+    setTouched((current) => ({ ...current, [field]: true }));
+    const message = validate()[field];
+    if (message) {
+      setFieldErrors((current) => ({ ...current, [field]: message }));
+    }
   }
 
   async function handleSubmit(event) {
@@ -83,17 +137,29 @@ export default function CustomerFormPage({ mode = "create" }) {
     setError("");
     const errors = validate();
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    setTouched({
+      customer_name: true,
+      phone: true,
+      email: true,
+      address: true,
+      city: true,
+      notes: true,
+    });
+
+    if (Object.keys(errors).length > 0) {
+      focusField(firstErrorKey(errors));
+      return;
+    }
 
     setSubmitting(true);
     const payload = {
-      ...values,
       customer_name: values.customer_name.trim(),
-      phone: values.phone.replace(/\s+/g, ""),
-      email: values.email.trim(),
+      phone: normalizePhone(values.phone),
+      email: values.email.trim().toLowerCase(),
       address: values.address.trim(),
       city: values.city.trim(),
       notes: values.notes.trim(),
+      status: values.status,
     };
 
     try {
@@ -111,7 +177,14 @@ export default function CustomerFormPage({ mode = "create" }) {
         });
       }
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "Could not save customer."));
+      const mapped = mapApiErrors(requestError);
+      if (mapped.form) setError(mapped.form);
+      const { form, ...rest } = mapped;
+      setFieldErrors(rest);
+      if (firstErrorKey(rest)) focusField(firstErrorKey(rest));
+      if (!mapped.form && !Object.keys(rest).length) {
+        setError(getErrorMessage(requestError, "Could not save customer."));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -144,44 +217,75 @@ export default function CustomerFormPage({ mode = "create" }) {
         <div className="form-grid">
           <Field
             label="Customer name"
+            name="customer_name"
             value={values.customer_name}
-            error={fieldErrors.customer_name}
-            onChange={(value) => setValues((current) => ({ ...current, customer_name: value }))}
+            maxLength={LIMITS.customer_name.max}
+            error={touched.customer_name ? fieldErrors.customer_name : ""}
+            onChange={(value) => updateField("customer_name", value)}
+            onBlur={() => handleBlur("customer_name")}
+            showCount
           />
           <Field
             label="Phone"
+            name="phone"
             value={values.phone}
-            error={fieldErrors.phone}
-            onChange={(value) => setValues((current) => ({ ...current, phone: value }))}
+            maxLength={10}
+            inputMode="numeric"
+            error={touched.phone ? fieldErrors.phone : ""}
+            onChange={(value) => updateField("phone", digitsOnly(value, 10))}
+            onBlur={() => handleBlur("phone")}
+            showCount
+            help="10-digit Indian mobile number"
           />
           <Field
             label="Email (optional)"
+            name="email"
             type="email"
             value={values.email}
-            error={fieldErrors.email}
-            onChange={(value) => setValues((current) => ({ ...current, email: value }))}
+            maxLength={LIMITS.email.max}
+            error={touched.email ? fieldErrors.email : ""}
+            onChange={(value) => updateField("email", value)}
+            onBlur={() => handleBlur("email")}
           />
           <Field
             label="City (optional)"
+            name="city"
             value={values.city}
-            onChange={(value) => setValues((current) => ({ ...current, city: value }))}
+            maxLength={LIMITS.city.max}
+            error={touched.city ? fieldErrors.city : ""}
+            onChange={(value) => updateField("city", value)}
+            onBlur={() => handleBlur("city")}
+            showCount
           />
           <Field
             label="Address (optional)"
+            name="address"
             value={values.address}
+            maxLength={LIMITS.address.max}
+            error={touched.address ? fieldErrors.address : ""}
+            onChange={(value) => updateField("address", value)}
+            onBlur={() => handleBlur("address")}
             className="span-2"
-            onChange={(value) => setValues((current) => ({ ...current, address: value }))}
+            showCount
           />
           <div className="field span-2">
             <label htmlFor="notes">Notes (optional)</label>
             <textarea
               id="notes"
+              name="notes"
               rows={3}
+              maxLength={LIMITS.notes.max}
               value={values.notes}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, notes: event.target.value }))
-              }
+              onChange={(event) => updateField("notes", event.target.value)}
+              onBlur={() => handleBlur("notes")}
+              className={touched.notes && fieldErrors.notes ? "is-invalid" : ""}
             />
+            <p className="help-text char-count">
+              {values.notes.length}/{LIMITS.notes.max}
+            </p>
+            {touched.notes && fieldErrors.notes ? (
+              <p className="field-error">{fieldErrors.notes}</p>
+            ) : null}
           </div>
           <div className="field">
             <label>Status</label>
@@ -190,7 +294,7 @@ export default function CustomerFormPage({ mode = "create" }) {
                 <input
                   type="radio"
                   checked={values.status === "active"}
-                  onChange={() => setValues((current) => ({ ...current, status: "active" }))}
+                  onChange={() => updateField("status", "active")}
                 />
                 Active
               </label>
@@ -198,7 +302,7 @@ export default function CustomerFormPage({ mode = "create" }) {
                 <input
                   type="radio"
                   checked={values.status === "inactive"}
-                  onChange={() => setValues((current) => ({ ...current, status: "inactive" }))}
+                  onChange={() => updateField("status", "inactive")}
                 />
                 Inactive
               </label>
@@ -224,18 +328,43 @@ export default function CustomerFormPage({ mode = "create" }) {
   );
 }
 
-function Field({ label, value, onChange, error, type = "text", className = "" }) {
-  const id = label.toLowerCase().replace(/\s+/g, "-");
+function Field({
+  label,
+  name,
+  value,
+  onChange,
+  onBlur,
+  error,
+  type = "text",
+  className = "",
+  maxLength,
+  inputMode,
+  showCount = false,
+  help,
+}) {
   return (
     <div className={`field ${className}`.trim()}>
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={name}>{label}</label>
       <input
-        id={id}
+        id={name}
+        name={name}
         type={type}
         value={value}
+        maxLength={maxLength}
+        inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        className={error ? "is-invalid" : ""}
         aria-invalid={error ? "true" : "false"}
       />
+      {showCount && maxLength ? (
+        <p className="help-text char-count">
+          {String(value || "").length}/{maxLength}
+          {help ? ` · ${help}` : ""}
+        </p>
+      ) : help ? (
+        <p className="help-text">{help}</p>
+      ) : null}
       {error ? <p className="field-error">{error}</p> : null}
     </div>
   );

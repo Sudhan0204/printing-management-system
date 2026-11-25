@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../services/api";
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { LIMITS, validateEmail } from "../../utils/validate";
 
 export default function TenantLogin() {
   const navigate = useNavigate();
@@ -18,18 +17,11 @@ export default function TenantLogin() {
 
   function validate() {
     const errors = {};
-    const trimmedEmail = email.trim();
-
-    if (!trimmedEmail) {
-      errors.email = "Email is required.";
-    } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      errors.email = "Enter a valid email address.";
-    }
+    const emailError = validateEmail(email, true);
+    if (emailError) errors.email = emailError;
 
     if (!password) {
       errors.password = "Password is required.";
-    } else if (password.length < 8) {
-      errors.password = "Password must be at least 8 characters.";
     }
 
     return errors;
@@ -86,9 +78,11 @@ export default function TenantLogin() {
             name="email"
             type="email"
             autoComplete="username"
+            maxLength={LIMITS.email.max}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             aria-invalid={fieldErrors.email ? "true" : "false"}
+            className={fieldErrors.email ? "is-invalid" : ""}
             disabled={submitting}
           />
           {fieldErrors.email ? <p className="field-error">{fieldErrors.email}</p> : null}

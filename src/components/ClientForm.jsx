@@ -1,8 +1,21 @@
 import { useMemo, useState } from "react";
 import { assetUrl } from "../services/api";
+import {
+  LIMITS,
+  digitsOnly,
+  firstErrorKey,
+  focusField,
+  mapApiErrors,
+  normalizePhone,
+  passwordStrength,
+  validateEmail,
+  validateIndianMobile,
+  validateIndianPincode,
+  validateLength,
+  validateName,
+  validateStrongPassword,
+} from "../utils/validate";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_PATTERN = /^[0-9+\-]{7,20}$/;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const EMPTY = {
@@ -32,7 +45,9 @@ export default function ClientForm({
   const [logoFile, setLogoFile] = useState(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [formError, setFormError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const previewUrl = useMemo(() => {
     if (logoFile) {
@@ -48,51 +63,64 @@ export default function ClientForm({
 
   function updateField(field, value) {
     setValues((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   }
 
-  function validate() {
+  function validate(nextValues = values) {
     const errors = {};
-    const required = [
-      "business_name",
-      "owner_name",
-      "email",
-      "phone",
-      "address",
-      "city",
-      "state",
-      "pincode",
-      "login_email",
-    ];
 
-    required.forEach((field) => {
-      if (!String(values[field] || "").trim()) {
-        errors[field] = "This field is required.";
-      }
+    const businessError = validateName(
+      nextValues.business_name,
+      "Business name",
+      LIMITS.business_name
+    );
+    if (businessError) errors.business_name = businessError;
+
+    const ownerError = validateName(nextValues.owner_name, "Owner name", LIMITS.owner_name);
+    if (ownerError) errors.owner_name = ownerError;
+
+    const emailError = validateEmail(nextValues.email, true);
+    if (emailError) errors.email = emailError;
+
+    const loginError = validateEmail(nextValues.login_email, true);
+    if (loginError) errors.login_email = loginError;
+
+    const phoneError = validateIndianMobile(nextValues.phone);
+    if (phoneError) errors.phone = phoneError;
+
+    const addressError = validateLength(nextValues.address, {
+      min: 1,
+      max: LIMITS.address.max,
+      label: "Address",
+      required: true,
     });
+    if (addressError) errors.address = addressError;
 
-    if (values.email && !EMAIL_PATTERN.test(values.email.trim())) {
-      errors.email = "Enter a valid email.";
-    }
+    const cityError = validateName(nextValues.city, "City", LIMITS.city);
+    if (cityError) errors.city = cityError;
 
-    if (values.login_email && !EMAIL_PATTERN.test(values.login_email.trim())) {
-      errors.login_email = "Enter a valid login email.";
-    }
+    const stateError = validateName(nextValues.state, "State", LIMITS.state);
+    if (stateError) errors.state = stateError;
 
-    if (values.phone && !PHONE_PATTERN.test(values.phone.replace(/\s+/g, ""))) {
-      errors.phone = "Enter a valid phone number.";
-    }
+    const pincodeError = validateIndianPincode(nextValues.pincode);
+    if (pincodeError) errors.pincode = pincodeError;
 
-    if (mode === "create" || values.password || values.password_confirmation) {
-      if (!values.password) {
-        errors.password = "Password is required.";
-      } else if (values.password.length < 8) {
-        errors.password = "Password must be at least 8 characters.";
-      } else if (!/[A-Za-z]/.test(values.password) || !/[0-9]/.test(values.password)) {
-        errors.password = "Use at least one letter and one number.";
-      }
-
-      if (values.password !== values.password_confirmation) {
-        errors.password_confirmation = "Passwords do not match.";
+    if (mode === "create" || nextValues.password || nextValues.password_confirmation) {
+      const passwordError = validateStrongPassword(
+        nextValues.password,
+        nextValues.password_confirmation
+      );
+      if (passwordError) {
+        if (passwordError.includes("confirmation")) {
+          errors.password_confirmation = passwordError;
+        } else {
+          errors.password = passwordError;
+        }
       }
     }
 
@@ -107,14 +135,29 @@ export default function ClientForm({
     return errors;
   }
 
+  function handleBlur(field) {
+    setTouched((current) => ({ ...current, [field]: true }));
+    const message = validate()[field];
+    if (message) {
+      setFieldErrors((current) => ({ ...current, [field]: message }));
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setFormError("");
 
     const errors = validate();
     setFieldErrors(errors);
+    setTouched(
+      Object.keys(values).reduce((acc, key) => {
+        acc[key] = true;
+        return acc;
+      }, {})
+    );
 
     if (Object.keys(errors).length > 0) {
+      focusField(firstErrorKey(errors));
       return;
     }
 
@@ -124,7 +167,11 @@ export default function ClientForm({
         return;
       }
 
-      formData.append(key, String(value).trim());
+      let nextValue = String(value).trim();
+      if (key === "phone") nextValue = normalizePhone(value);
+      if (key === "email" || key === "login_email") nextValue = nextValue.toLowerCase();
+      if (key === "password" || key === "password_confirmation") nextValue = String(value);
+      formData.append(key, nextValue);
     });
 
     if (logoFile) {
@@ -138,14 +185,29 @@ export default function ClientForm({
     try {
       await onSubmit(formData);
     } catch (error) {
-      setFormError(error?.response?.data?.message || "Could not save client.");
+      const mapped = mapApiErrors(error);
+      if (mapped.form) setFormError(mapped.form);
+      const { form, ...rest } = mapped;
+      setFieldErrors(rest);
+      if (firstErrorKey(rest)) focusField(firstErrorKey(rest));
+      if (!mapped.form && !Object.keys(rest).length) {
+        setFormError(error?.response?.data?.message || "Could not save client.");
+      }
     }
   }
+
+  const strength = passwordStrength(values.password);
 
   function handleLogoChange(event) {
     const file = event.target.files?.[0] || null;
     setLogoFile(file);
     setRemoveLogo(false);
+    setFieldErrors((current) => {
+      if (!current.logo) return current;
+      const next = { ...current };
+      delete next.logo;
+      return next;
+    });
   }
 
   return (
@@ -163,67 +225,93 @@ export default function ClientForm({
             label="Business name"
             id="business_name"
             value={values.business_name}
-            error={fieldErrors.business_name}
+            maxLength={LIMITS.business_name.max}
+            error={touched.business_name ? fieldErrors.business_name : ""}
             onChange={(value) => updateField("business_name", value)}
+            onBlur={() => handleBlur("business_name")}
             disabled={submitting}
+            showCount
           />
           <Field
             label="Owner name"
             id="owner_name"
             value={values.owner_name}
-            error={fieldErrors.owner_name}
+            maxLength={LIMITS.owner_name.max}
+            error={touched.owner_name ? fieldErrors.owner_name : ""}
             onChange={(value) => updateField("owner_name", value)}
+            onBlur={() => handleBlur("owner_name")}
             disabled={submitting}
+            showCount
           />
           <Field
             label="Business email"
             id="email"
             type="email"
             value={values.email}
-            error={fieldErrors.email}
+            maxLength={LIMITS.email.max}
+            error={touched.email ? fieldErrors.email : ""}
             onChange={(value) => updateField("email", value)}
+            onBlur={() => handleBlur("email")}
             disabled={submitting}
           />
           <Field
             label="Phone"
             id="phone"
             value={values.phone}
-            error={fieldErrors.phone}
-            onChange={(value) => updateField("phone", value)}
+            maxLength={10}
+            inputMode="numeric"
+            error={touched.phone ? fieldErrors.phone : ""}
+            onChange={(value) => updateField("phone", digitsOnly(value, 10))}
+            onBlur={() => handleBlur("phone")}
             disabled={submitting}
+            showCount
+            help="10-digit Indian mobile"
           />
           <Field
             label="Address"
             id="address"
             value={values.address}
-            error={fieldErrors.address}
+            maxLength={LIMITS.address.max}
+            error={touched.address ? fieldErrors.address : ""}
             onChange={(value) => updateField("address", value)}
+            onBlur={() => handleBlur("address")}
             disabled={submitting}
             className="span-2"
+            showCount
           />
           <Field
             label="City"
             id="city"
             value={values.city}
-            error={fieldErrors.city}
+            maxLength={LIMITS.city.max}
+            error={touched.city ? fieldErrors.city : ""}
             onChange={(value) => updateField("city", value)}
+            onBlur={() => handleBlur("city")}
             disabled={submitting}
+            showCount
           />
           <Field
             label="State"
             id="state"
             value={values.state}
-            error={fieldErrors.state}
+            maxLength={LIMITS.state.max}
+            error={touched.state ? fieldErrors.state : ""}
             onChange={(value) => updateField("state", value)}
+            onBlur={() => handleBlur("state")}
             disabled={submitting}
+            showCount
           />
           <Field
             label="Pincode"
             id="pincode"
             value={values.pincode}
-            error={fieldErrors.pincode}
-            onChange={(value) => updateField("pincode", value)}
+            maxLength={6}
+            inputMode="numeric"
+            error={touched.pincode ? fieldErrors.pincode : ""}
+            onChange={(value) => updateField("pincode", digitsOnly(value, 6))}
+            onBlur={() => handleBlur("pincode")}
             disabled={submitting}
+            showCount
           />
         </div>
       </section>
@@ -236,28 +324,57 @@ export default function ClientForm({
             id="login_email"
             type="email"
             value={values.login_email}
-            error={fieldErrors.login_email}
+            maxLength={LIMITS.email.max}
+            error={touched.login_email ? fieldErrors.login_email : ""}
             onChange={(value) => updateField("login_email", value)}
+            onBlur={() => handleBlur("login_email")}
             disabled={submitting}
           />
           <div />
-          <Field
-            label={mode === "edit" ? "New password (optional)" : "Password"}
-            id="password"
-            type="password"
-            value={values.password}
-            error={fieldErrors.password}
-            onChange={(value) => updateField("password", value)}
-            disabled={submitting}
-            autoComplete="new-password"
-          />
+          <div className="field">
+            <label htmlFor="password">
+              {mode === "edit" ? "New password (optional)" : "Password"}
+            </label>
+            <div className="password-field">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={values.password}
+                maxLength={LIMITS.password.max}
+                onChange={(event) => updateField("password", event.target.value)}
+                onBlur={() => handleBlur("password")}
+                disabled={submitting}
+                autoComplete="new-password"
+                className={touched.password && fieldErrors.password ? "is-invalid" : ""}
+              />
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setShowPassword((current) => !current)}
+                disabled={submitting}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+            {values.password ? (
+              <p className={`help-text strength-${strength.label.toLowerCase()}`}>
+                Password strength: {strength.label}
+              </p>
+            ) : null}
+            {touched.password && fieldErrors.password ? (
+              <p className="field-error">{fieldErrors.password}</p>
+            ) : null}
+          </div>
           <Field
             label="Confirm password"
             id="password_confirmation"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={values.password_confirmation}
-            error={fieldErrors.password_confirmation}
+            maxLength={LIMITS.password.max}
+            error={touched.password_confirmation ? fieldErrors.password_confirmation : ""}
             onChange={(value) => updateField("password_confirmation", value)}
+            onBlur={() => handleBlur("password_confirmation")}
             disabled={submitting}
             autoComplete="new-password"
           />
@@ -349,11 +466,16 @@ function Field({
   id,
   value,
   onChange,
+  onBlur,
   error,
   disabled,
   type = "text",
   className = "",
   autoComplete,
+  maxLength,
+  inputMode,
+  showCount = false,
+  help,
 }) {
   return (
     <div className={`field ${className}`.trim()}>
@@ -363,11 +485,23 @@ function Field({
         name={id}
         type={type}
         value={value}
+        maxLength={maxLength}
+        inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         disabled={disabled}
         autoComplete={autoComplete}
+        className={error ? "is-invalid" : ""}
         aria-invalid={error ? "true" : "false"}
       />
+      {showCount && maxLength ? (
+        <p className="help-text char-count">
+          {String(value || "").length}/{maxLength}
+          {help ? ` · ${help}` : ""}
+        </p>
+      ) : help ? (
+        <p className="help-text">{help}</p>
+      ) : null}
       {error ? <p className="field-error">{error}</p> : null}
     </div>
   );
