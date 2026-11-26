@@ -16,6 +16,13 @@ const DATE_PRESETS = [
   { value: "custom", label: "Custom range" },
 ];
 
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "", label: "All" },
+  { value: "paid", label: "Paid" },
+  { value: "partially_paid", label: "Partially Paid" },
+  { value: "unpaid", label: "Unpaid" },
+];
+
 export default function CustomerReports() {
   const navigate = useNavigate();
   const { csrfToken, clearSession } = useAuth();
@@ -24,6 +31,7 @@ export default function CustomerReports() {
   const [searchPhone, setSearchPhone] = useState("");
   const [searchEmail, setSearchEmail] = useState("");
   const [status, setStatus] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
   const [datePreset, setDatePreset] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -33,11 +41,21 @@ export default function CustomerReports() {
   const [summary, setSummary] = useState(null);
   const [filtersMeta, setFiltersMeta] = useState(null);
   const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0 });
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Persist selected customers across search/filter reloads (id -> snapshot).
+  const [selectedCustomers, setSelectedCustomers] = useState({});
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState("");
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
+
+  const selectedIds = useMemo(
+    () => new Set(Object.keys(selectedCustomers).map((id) => Number(id))),
+    [selectedCustomers]
+  );
+  const selectedList = useMemo(
+    () => Object.values(selectedCustomers).sort((a, b) => a.customer_name.localeCompare(b.customer_name)),
+    [selectedCustomers]
+  );
 
   const filterParams = useMemo(
     () => ({
@@ -45,13 +63,14 @@ export default function CustomerReports() {
       search_phone: searchPhone.trim() || undefined,
       search_email: searchEmail.trim().toLowerCase() || undefined,
       status: status || undefined,
+      payment_status: paymentStatus || undefined,
       date_preset: datePreset || undefined,
       date_from: datePreset === "custom" ? dateFrom || undefined : undefined,
       date_to: datePreset === "custom" ? dateTo || undefined : undefined,
       page,
       per_page: 25,
     }),
-    [searchName, searchPhone, searchEmail, status, datePreset, dateFrom, dateTo, page]
+    [searchName, searchPhone, searchEmail, status, paymentStatus, datePreset, dateFrom, dateTo, page]
   );
 
   useEffect(() => {
@@ -72,7 +91,7 @@ export default function CustomerReports() {
         setSummary(response.data.summary || null);
         setFiltersMeta(response.data.filters || null);
         setPagination(response.data.pagination || { page: 1, total_pages: 1, total: 0 });
-        setSelectedIds(new Set());
+        // Do NOT clear selectedCustomers here — selections persist across search/filters.
       } catch (requestError) {
         if (!active) return;
         if (requestError?.response?.status === 401 || requestError?.response?.status === 403) {
@@ -110,29 +129,53 @@ export default function CustomerReports() {
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
   const selectedCount = selectedIds.size;
 
-  function toggleOne(id) {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+  function rememberCustomer(customer) {
+    return {
+      id: customer.id,
+      customer_name: customer.customer_name,
+      phone: customer.phone || "",
+    };
+  }
+
+  function toggleOne(customer) {
+    setSelectedCustomers((current) => {
+      const next = { ...current };
+      if (next[customer.id]) {
+        delete next[customer.id];
+      } else {
+        next[customer.id] = rememberCustomer(customer);
+      }
+      return next;
+    });
+  }
+
+  function removeSelected(id) {
+    setSelectedCustomers((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
       return next;
     });
   }
 
   function toggleAllPage() {
-    setSelectedIds((current) => {
-      const next = new Set(current);
+    setSelectedCustomers((current) => {
+      const next = { ...current };
       if (allPageSelected) {
-        pageIds.forEach((id) => next.delete(id));
+        pageIds.forEach((id) => {
+          delete next[id];
+        });
       } else {
-        pageIds.forEach((id) => next.add(id));
+        customers.forEach((customer) => {
+          next[customer.id] = rememberCustomer(customer);
+        });
       }
       return next;
     });
   }
 
   function clearSelection() {
-    setSelectedIds(new Set());
+    setSelectedCustomers({});
   }
 
   function resetFilters() {
@@ -140,6 +183,7 @@ export default function CustomerReports() {
     setSearchPhone("");
     setSearchEmail("");
     setStatus("");
+    setPaymentStatus("");
     setDatePreset("");
     setDateFrom("");
     setDateTo("");
@@ -152,6 +196,7 @@ export default function CustomerReports() {
       search_phone: searchPhone.trim(),
       search_email: searchEmail.trim().toLowerCase(),
       status,
+      payment_status: paymentStatus,
       date_preset: datePreset,
       date_from: datePreset === "custom" ? dateFrom : "",
       date_to: datePreset === "custom" ? dateTo : "",
@@ -209,7 +254,7 @@ export default function CustomerReports() {
           </p>
         </div>
         <div className="report-hero-meta">
-          <span className="report-pill">Excel workbook · 5 sheets</span>
+          <span className="report-pill">Excel workbook · 6 sheets</span>
           <span className="report-pill muted-pill">
             {filtersMeta?.filter_label || "All dates"}
           </span>
@@ -310,6 +355,22 @@ export default function CustomerReports() {
                 </select>
               </label>
               <label className="report-field">
+                <span>Payment Status</span>
+                <select
+                  value={paymentStatus}
+                  onChange={(event) => {
+                    setPage(1);
+                    setPaymentStatus(event.target.value);
+                  }}
+                >
+                  {PAYMENT_STATUS_OPTIONS.map((item) => (
+                    <option key={item.value || "all"} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="report-field">
                 <span>Date range</span>
                 <select
                   value={datePreset}
@@ -354,7 +415,7 @@ export default function CustomerReports() {
             </div>
             <p className="help-text">
               Bills use bill date. Payments use payment date. Outstanding uses bill balances in that
-              bill-date range.
+              bill-date range. Payment Status classifies customers from bills in the same date scope.
             </p>
           </section>
 
@@ -410,6 +471,26 @@ export default function CustomerReports() {
             {exporting ? (
               <p className="help-text export-progress">Preparing Excel workbook…</p>
             ) : null}
+            {selectedList.length > 0 ? (
+              <div className="report-selected-chips" aria-label="Selected customers">
+                {selectedList.map((customer) => (
+                  <span key={customer.id} className="report-selected-chip">
+                    <span>
+                      {customer.customer_name}
+                      {customer.phone ? ` · ${customer.phone}` : ""}
+                    </span>
+                    <button
+                      type="button"
+                      className="report-chip-remove"
+                      onClick={() => removeSelected(customer.id)}
+                      aria-label={`Remove ${customer.customer_name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <section className="panel table-panel report-table-panel">
@@ -450,7 +531,7 @@ export default function CustomerReports() {
                         <input
                           type="checkbox"
                           checked={selectedIds.has(customer.id)}
-                          onChange={() => toggleOne(customer.id)}
+                          onChange={() => toggleOne(customer)}
                           aria-label={`Select ${customer.customer_name}`}
                         />
                       </td>
